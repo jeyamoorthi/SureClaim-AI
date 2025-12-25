@@ -8,6 +8,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from huggingface_hub import InferenceClient
 import google.generativeai as genai
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # ---------------- CONFIG ----------------
 st.set_page_config(layout="wide")
