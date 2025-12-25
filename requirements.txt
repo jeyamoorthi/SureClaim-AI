@@ -1,7 +1,10 @@
 streamlit
+faiss-cpu
+numpy
+pandas
+sentence-transformers
+huggingface-hub
+google-generativeai
+python-dotenv
 langchain
 langchain-community
-langchain-openai
-faiss-cpu
-pypdf
-openai
