@@ -8,11 +8,11 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from huggingface_hub import InferenceClient
 import google.generativeai as genai
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # ---------------- CONFIG ----------------
 st.set_page_config(layout="wide")
 st.title("SureClaim AI – Appian Knowledge Copilot")
+st.caption("Context-aware, policy-grounded decision support for high-stakes casework")
 
 # ---------------- GEMINI (QUESTION SUGGESTION ONLY) ----------------
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
@@ -25,21 +25,21 @@ CLAIM_TYPE = "Flood"
 STATE = "Florida"
 POLICY = "NFIP Flood Insurance"
 
-st.sidebar.write(f"Claim Type: {CLAIM_TYPE}")
-st.sidebar.write(f"State: {STATE}")
-st.sidebar.write(f"Policy: {POLICY}")
+st.sidebar.write(f"**Case Type:** {CLAIM_TYPE}")
+st.sidebar.write(f"**Jurisdiction:** {STATE}")
+st.sidebar.write(f"**Policy Source:** {POLICY}")
 
 st.sidebar.divider()
 st.sidebar.subheader("Context-Aware Suggestions")
 
 case_context = f"""
-Claim Type: {CLAIM_TYPE}
-State: {STATE}
-Policy: {POLICY}
+Case Type: {CLAIM_TYPE}
+Jurisdiction: {STATE}
+Policy Source: {POLICY}
 """
 
 suggestion_prompt = f"""
-Suggest 4 policy-related questions an insurance agent may ask.
+Suggest 4 policy-related questions a support agent may ask.
 Rules:
 - ONLY questions
 - NO answers
@@ -58,10 +58,10 @@ try:
     ][:4]
 except Exception:
     suggestions = [
-        "Is damage to a basement covered under this flood insurance policy?",
-        "What items are excluded from basement coverage?",
-        "What is the maximum payout limit under this policy?",
-        "Does Coverage D apply to this claim?"
+        "Is damage to a basement covered under this policy?",
+        "What items are excluded under this policy?",
+        "What is the maximum payout limit?",
+        "Does additional compliance coverage apply?"
     ]
 
 if "auto_query" not in st.session_state:
@@ -90,16 +90,16 @@ llm = InferenceClient(
 
 # ---------------- MAIN INPUT ----------------
 query = st.text_input(
-    "Ask a policy question",
+    "Ask a policy or compliance question",
     value=st.session_state.auto_query,
-    placeholder="Ask about coverage, exclusions, limits, or compliance"
+    placeholder="Coverage, exclusions, limits, or regulatory conditions"
 )
 
 # ---------------- RAG PIPELINE ----------------
 if query:
-    with st.spinner("Analyzing policy…"):
+    with st.spinner("Analyzing relevant policy knowledge…"):
         q_emb = embedder.encode([query])
-        D, I = index.search(np.array(q_emb), k=8)  # 🔑 IMPORTANT
+        D, I = index.search(np.array(q_emb), k=8)
 
         context_blocks = []
         pages = set()
@@ -111,25 +111,23 @@ if query:
         context = "\n\n".join(context_blocks)
 
         system_message = """
-You are SureClaim AI, an enterprise insurance policy copilot.
+You are SureClaim AI, a policy-grounded knowledge copilot for regulated casework.
 
 STRICT RULES:
-- Use ONLY the provided policy context.
-- DO NOT invent facts.
-- DO NOT ask new questions.
-- If coverage depends on conditions, EXPLAIN the conditions.
-- Only say "Cannot determine" if the policy text truly provides no guidance.
+- Use ONLY the provided document context
+- NEVER invent or assume information
+- If policy guidance is conditional, explain conditions clearly
+- If guidance is missing, say so explicitly and responsibly
 
 RESPONSE FORMAT (MANDATORY):
 
 Decision:
-One clear sentence (Yes / No / Conditional)
+Yes / No / Conditional / Cannot Determine
 
 Explanation:
-- Bullet points in plain English
-- Summarize rules and conditions
-- NO citations inside text
-
+- Bullet points
+- Plain, professional language
+- Explain reasoning and limits
 """
 
         user_message = f"""
@@ -152,15 +150,14 @@ Question:
         answer = response.choices[0].message.content.strip()
 
         # ---------------- SAFE PARSING ----------------
+        decision_text = "Cannot determine from the available policy."
+        explanation_text = "The document does not provide explicit guidance for this scenario."
+
         if "Decision:" in answer:
             decision_text = answer.split("Decision:")[1].split("Explanation:")[0].strip()
-        else:
-            decision_text = "Cannot determine from the available policy."
 
         if "Explanation:" in answer:
             explanation_text = answer.split("Explanation:")[1].strip()
-        else:
-            explanation_text = "The policy text does not clearly define this scenario."
 
         # ---------------- OUTPUT ----------------
         st.markdown("### Decision")
@@ -169,9 +166,16 @@ Question:
         st.markdown("### Explanation")
         st.markdown(explanation_text)
 
+        if "Cannot determine" in decision_text:
+            st.info(
+                "This does not indicate a failure. "
+                "It highlights that the policy does not explicitly cover this scenario, "
+                "allowing the agent to escalate or verify with confidence."
+            )
+
         st.markdown("### Evidence and Provenance")
         st.markdown(
-            "Cited Pages: " +
+            "Cited Sections: " +
             ", ".join([f"Page {p}" for p in sorted(pages)])
         )
 
@@ -180,11 +184,11 @@ Question:
                 st.write(f"Policy Document – Page {p}")
 
 # ---------------- APPIAN ALIGNMENT ----------------
-with st.expander("How this aligns with Appian"):
+with st.expander("How this fits inside an Appian workflow"):
     st.write("""
-- Gemini is used only for workflow question suggestions
-- Policy decisions are grounded in indexed documents
-- AI operates inside case context
-- All answers are explainable and auditable
-- Human review remains the final authority
+- Case context is read automatically from the active record
+- Knowledge is retrieved just-in-time, not preloaded or memorized
+- AI responses are always grounded in source documents
+- Decisions remain human-controlled and audit-ready
+- The same architecture applies across insurance, finance, and government casework
 """)
